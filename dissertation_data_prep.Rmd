@@ -1,0 +1,483 @@
+---
+title: "dissertation_data_prep"
+author: "Aleksander Dominas"
+date: "06/07/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(ggplot2)
+
+#Library for detecting days which are weekends
+library(chron)
+```
+
+
+```{r}
+#floor3_2019 <- read.csv(file = '2019Floor3.csv')
+#floor4_2019 <- read.csv(file = '2019Floor4.csv')
+#floor5_2019 <- read.csv(file = '2019Floor5.csv')
+#floor6_2019 <- read.csv(file = '2019Floor6.csv')
+floor7_2019 <- read.csv(file = '2019Floor7.csv')
+floor7_2018 <- read.csv(file = '2018Floor7.csv')
+```
+
+```{r}
+f7_2019_half_hour = floor7_2019[seq(1, nrow(floor7_2019), 30), ]
+f7_2018_half_hour = floor7_2018[seq(1, nrow(floor7_2018), 30), ]
+```
+
+```{r}
+head(f7_2018_half_hour)
+```
+
+```{r}
+colSums(is.na(f7_2018_half_hour))
+```
+
+```{r}
+colSums(is.na(f7_2019_half_hour))
+```
+
+
+```{r}
+# For checking type of missingness
+new_DF <- f7_2018_half_hour[!is.na(f7_2018_half_hour$z1_S1.degC.),]
+View(new_DF)
+```
+
+```{r}
+#Creating new dataframes with selected columns
+f7_2018_reduced <- f7_2018_half_hour[, c("Date", "z1_AC3.kW.", "z1_Light.kW.", "z1_Plug.kW.", "z1_S1.degC.", "z1_S1.RH..", "z1_S1.lux.")]
+
+f7_2019_reduced <- f7_2019_half_hour[, c("Date" ,"z1_AC3.kW.", "z1_Light.kW.", "z1_Plug.kW.", "z1_S1.degC.", "z1_S1.RH..", "z1_S1.lux.")]
+```
+
+```{r}
+#Renaming Columns
+names(f7_2018_reduced)[names(f7_2018_reduced) == "z1_AC3.kW."] <- "AC (kW)"
+names(f7_2018_reduced)[names(f7_2018_reduced) == "z1_Light.kW."] <- "Lighting (kW)"
+names(f7_2018_reduced)[names(f7_2018_reduced) == "z1_Plug.kW."] <- "Plug (kW)"
+names(f7_2018_reduced)[names(f7_2018_reduced) == "z1_S1.degC."] <- "Temperature (°C)"
+names(f7_2018_reduced)[names(f7_2018_reduced) == "z1_S1.RH.."] <- "Relative Humidity (%)"
+names(f7_2018_reduced)[names(f7_2018_reduced) == "z1_S1.lux."] <- "Ambient Light (lux)"
+
+names(f7_2019_reduced)[names(f7_2019_reduced) == "z1_AC3.kW."] <- "AC (kW)"
+names(f7_2019_reduced)[names(f7_2019_reduced) == "z1_Light.kW."] <- "Lighting (kW)"
+names(f7_2019_reduced)[names(f7_2019_reduced) == "z1_Plug.kW."] <- "Plug (kW)"
+names(f7_2019_reduced)[names(f7_2019_reduced) == "z1_S1.degC."] <- "Temperature (°C)"
+names(f7_2019_reduced)[names(f7_2019_reduced) == "z1_S1.RH.."] <- "Relative Humidity (%)"
+names(f7_2019_reduced)[names(f7_2019_reduced) == "z1_S1.lux."] <- "Ambient Light (lux)"
+```
+
+```{r}
+View(f7_2019_reduced)
+```
+
+
+```{r}
+# Removing instances with missing values
+f7_2018_complete_Cases <- f7_2018_reduced[complete.cases(f7_2018_reduced),]
+f7_2019_complete_Cases <- f7_2019_reduced[complete.cases(f7_2019_reduced),]
+```
+
+```{r}
+#Merging two dataframes
+consumption_unclean <- rbind(f7_2018_complete_Cases, f7_2019_complete_Cases)
+```
+
+```{r}
+#Converting date string to DateTime object
+consumption_unclean$Date <- as.POSIXct(consumption_unclean$Date,
+                 format="%Y-%m-%d %H:%M:%S", tz = 'GMT')
+```
+
+```{r}
+#Finding rows which are weekends, and creates new cols based on that
+consumption_unclean$isWeekend <- ifelse(is.weekend(consumption_unclean$Date), 1, 0)
+```
+
+```{r}
+#Creating new season column to label seasons: 0 - summer, 1 - Monsoon, 2 - Winter
+consumption_unclean$Season <- 0
+consumption_unclean$Season[format(consumption_unclean$Date, '%m') == '07' | format(consumption_unclean$Date, '%m') == '08' | format(consumption_unclean$Date, '%m') == '09' | format(consumption_unclean$Date, '%m') == '10'] <- 1 
+consumption_unclean$Season[format(consumption_unclean$Date, '%m') == '11' | format(consumption_unclean$Date, '%m') == '12' | format(consumption_unclean$Date, '%m') == '01' | format(consumption_unclean$Date, '%m') == '02'] <- 2
+```
+
+```{r}
+#Converting appropriate variable types
+consumption_unclean$isWeekend <- as.factor(consumption_unclean$isWeekend)
+consumption_unclean$Season <- as.factor(consumption_unclean$Season)
+```
+
+```{r}
+summary(consumption_unclean)
+```
+
+
+```{r}
+summer_weekday <- consumption_unclean[consumption_unclean$Season == 0 & consumption_unclean$isWeekend == 0,]
+
+summer_weekend <- consumption_unclean[consumption_unclean$Season == 0 & consumption_unclean$isWeekend == 1,]
+```
+
+```{r}
+par(mfrow=c(1,1))
+boxplot(summer_weekday$`AC (kW)`, summer_weekend$`AC (kW)`, main = "Summer", ylab = "AC (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,1))
+boxplot(summer_weekday$`Lighting (kW)`, summer_weekend$`Lighting (kW)`, main = "Summer", ylab = "Lighting (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,1))
+boxplot(summer_weekday$`Plug (kW)`, summer_weekend$`Plug (kW)`, main = "Summer", ylab = "Plug (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+monsoon_weekday <- consumption_unclean[consumption_unclean$Season == 1 & consumption_unclean$isWeekend == 0,]
+
+monsoon_weekend <- consumption_unclean[consumption_unclean$Season == 1 & consumption_unclean$isWeekend == 1,]
+```
+
+```{r}
+par(mfrow=c(1,1))
+boxplot(monsoon_weekday$`AC (kW)`, monsoon_weekend$`AC (kW)`, main = "Monsoon", ylab = "AC (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,1))
+boxplot(monsoon_weekday$`Lighting (kW)`, monsoon_weekend$`Lighting (kW)`, main = "Monsoon", ylab = "Lighting (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,1))
+boxplot(monsoon_weekday$`Plug (kW)`, monsoon_weekend$`Plug (kW)`, main = "Monsoon", ylab = "Plug (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+winter_weekday <- consumption_unclean[consumption_unclean$Season == 2 & consumption_unclean$isWeekend == 0,]
+
+winter_weekend <- consumption_unclean[consumption_unclean$Season == 2 & consumption_unclean$isWeekend == 1,]
+```
+
+```{r}
+par(mfrow=c(1,1))
+boxplot(winter_weekday$`AC (kW)`, winter_weekend$`AC (kW)`, main = "Winter", ylab = "AC (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,1))
+boxplot(winter_weekday$`Lighting (kW)`, winter_weekend$`Lighting (kW)`, main = "Winter", ylab = "Lighting (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,1))
+boxplot(winter_weekday$`Plug (kW)`, winter_weekend$`Plug (kW)`, main = "Winter", ylab = "Plug (kW)", names = c("Weekday", "Weekend"))
+```
+```{r}
+par(mfrow=c(1,3))
+boxplot(summer_weekday$`AC (kW)`, summer_weekend$`AC (kW)`, main = "Summer", ylab = "AC (kW)", names = c("Weekday", "Weekend"), ylim = c(0, 1.3))
+boxplot(monsoon_weekday$`AC (kW)`, monsoon_weekend$`AC (kW)`, main = "Monsoon", names = c("Weekday", "Weekend"), ylim = c(0,1.3))
+boxplot(winter_weekday$`AC (kW)`, winter_weekend$`AC (kW)`, main = "Winter", names = c("Weekday", "Weekend"), ylim = c(0,1.3))
+```
+```{r}
+par(mfrow=c(1,3))
+boxplot(summer_weekday$`Lighting (kW)`, summer_weekend$`Lighting (kW)`, main = "Summer", ylab = "Lighting (kW)", names = c("Weekday", "Weekend"), ylim = c(0,4))
+boxplot(monsoon_weekday$`Lighting (kW)`, monsoon_weekend$`Lighting (kW)`, main = "Monsoon", names = c("Weekday", "Weekend"), ylim = c(0,4))
+boxplot(winter_weekday$`Lighting (kW)`, winter_weekend$`Lighting (kW)`, main = "Winter", names = c("Weekday", "Weekend"), ylim = c(0,4))
+```
+```{r}
+par(mfrow=c(1,3))
+boxplot(summer_weekday$`Plug (kW)`, summer_weekend$`Plug (kW)`, main = "Summer", ylab = "Plug (kW)", names = c("Weekday", "Weekend"), ylim = c(0,2.5))
+boxplot(monsoon_weekday$`Plug (kW)`, monsoon_weekend$`Plug (kW)`, main = "Monsoon", names = c("Weekday", "Weekend"), ylim = c(0,2.5))
+boxplot(winter_weekday$`Plug (kW)`, winter_weekend$`Plug (kW)`, main = "Winter", names = c("Weekday", "Weekend"), ylim = c(0,2.5))
+```
+```{r}
+par(mfrow=c(1,3))
+x <- summer_weekday$`AC (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="AC (kW)",
+   main="Summer Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- monsoon_weekday$`AC (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="AC (kW)",
+   main="Monsoon Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- winter_weekday$`AC (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="AC (kW)",
+   main="Winter Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+```
+```{r}
+par(mfrow=c(1,3))
+x <- summer_weekend$`AC (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="AC (kW)",
+   main="Summer Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- monsoon_weekend$`AC (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="AC (kW)",
+   main="Monsoon Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- winter_weekend$`AC (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="AC (kW)",
+   main="Winter Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+```
+
+```{r}
+par(mfrow=c(1,3))
+x <- summer_weekday$`Lighting (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Lighting (kW)",
+   main="Summer Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- monsoon_weekday$`Lighting (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Lighting (kW)",
+   main="Monsoon Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- winter_weekday$`Lighting (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Lighting (kW)",
+   main="Winter Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+```
+
+```{r}
+par(mfrow=c(1,3))
+x <- summer_weekend$`Lighting (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Lighting (kW)",
+   main="Summer Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- monsoon_weekend$`Lighting (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Lighting (kW)",
+   main="Monsoon Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- winter_weekend$`Lighting (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Lighting (kW)",
+   main="Winter Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+```
+```{r}
+par(mfrow=c(1,3))
+x <- summer_weekday$`Plug (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Plug (kW)",
+   main="Summer Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- monsoon_weekday$`Plug (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Plug (kW)",
+   main="Monsoon Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- winter_weekday$`Plug (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Plug (kW)",
+   main="Winter Weekday")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+```
+```{r}
+par(mfrow=c(1,3))
+x <- summer_weekend$`Plug (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Plug (kW)",
+   main="Summer Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- monsoon_weekend$`Plug (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Plug (kW)",
+   main="Monsoon Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+
+x <- winter_weekend$`Plug (kW)`
+h<-hist(x, breaks=12, col="blue", xlab="Plug (kW)",
+   main="Winter Weekend")
+xfit<-seq(min(x),max(x),length=40)
+yfit<-dnorm(xfit,mean=mean(x),sd=sd(x))
+yfit <- yfit*diff(h$mids[1:2])*length(x)
+lines(xfit, yfit, col="red", lwd=2)
+```
+```{r}
+#Creating new anomaly type column to label anomalies: 0 - not anomalous, 1 - AC anomaly, 2 - Lighting anomaly, 3 - Plug anomaly
+consumption_unclean$AnomalyType <- 0
+
+# Plug
+consumption_unclean$AnomalyType[(consumption_unclean$`Plug (kW)` >  0.3 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 0) | (consumption_unclean$`Plug (kW)` >  0.7 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 0) | (consumption_unclean$`Plug (kW)` >  0.16 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 2) | (consumption_unclean$`Plug (kW)` >  0.6 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 2) | (consumption_unclean$`Plug (kW)` >  0.4 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 1) | (consumption_unclean$`Plug (kW)` >  0.7 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 1)] <- 3 
+
+# Lighting
+consumption_unclean$AnomalyType[(consumption_unclean$`Lighting (kW)` >  1.4 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 0) | (consumption_unclean$`Lighting (kW)` >  3.3 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 0) | (consumption_unclean$`Lighting (kW)` >  1.3 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 2) | (consumption_unclean$`Lighting (kW)` >  3.2 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 2) | (consumption_unclean$`Lighting (kW)` >  1.25 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 1) | (consumption_unclean$`Lighting (kW)` >  2.8 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 1)] <- 2 
+
+# AC
+consumption_unclean$AnomalyType[(consumption_unclean$`AC (kW)` >  0.18 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 0) | (consumption_unclean$`AC (kW)` >  0.36 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 0) | (consumption_unclean$`AC (kW)` >  0.02 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 2) | (consumption_unclean$`AC (kW)` >  0.2 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 2) | (consumption_unclean$`AC (kW)` >  0.07 & consumption_unclean$isWeekend == 1  & consumption_unclean$Season == 1) | (consumption_unclean$`AC (kW)` >  0.30 & consumption_unclean$isWeekend == 0  & consumption_unclean$Season == 1)] <- 1 
+
+```
+
+```{r}
+consumption_unclean$AnomalyType <- as.factor(consumption_unclean$AnomalyType)
+```
+
+```{r}
+consumption <- consumption_unclean[,c("AC (kW)", "Lighting (kW)", "Plug (kW)", "Temperature (°C)", "Relative Humidity (%)", "Ambient Light (lux)", "isWeekend", "Season", "AnomalyType")]
+```
+
+```{r}
+str(consumption)
+```
+
+PCA - Principal Component Analysis
+
+```{r}
+# Converting factors columns back to numeric
+consumption$isWeekend <- as.character(consumption$isWeekend)
+consumption$Season <- as.character(consumption$Season)
+
+consumption$isWeekend <- as.numeric(consumption$isWeekend)
+consumption$Season <- as.numeric(consumption$Season)
+```
+
+
+```{r}
+# Scaling features for PCA
+consumption.pr <- prcomp(consumption[c(1:8)], center = TRUE, scale = TRUE)
+
+attributes(consumption.pr)
+
+summary(consumption.pr)
+ 
+print(consumption.pr)
+```
+PC1 can explain 40% of the total variation in the dataset. PCs 1, 2, 3, and 4 together can explain over 80% of the variation. 
+
+```{r}
+# Plotting Cumulative PEV plot
+pc_var <- consumption.pr$sdev^2
+pc_PEV <- pc_var / sum(pc_var)
+
+opar <- par(no.readonly = TRUE)
+plot(
+  cumsum(pc_PEV),
+  ylim = c(0,1),
+  xlab = 'PC',
+  ylab = 'cumulative PEV',
+  pch = 20,
+  col = 'black'
+)
+abline(h = 0.8, col = 'red', lty = 'dashed')
+par(opar)
+```
+```{r}
+variance = pc_var / sum(pc_var)
+ 
+# Scree plot
+qplot(c(1:8), variance) +
+  geom_line() +
+  geom_point(size=4)+
+  xlab("Principal Component") +
+  ylab("Variance Explained") +
+  ggtitle("Scree Plot") +
+  ylim(0, 1)
+```
+```{r}
+# Get and inspect the loadings for each PC
+pc_loadings <- consumption.pr$rotation
+pc_loadings
+```
+```{r}
+# plot the loadings for the first four PCs as a barplot
+opar <- par(no.readonly = TRUE)
+colvector = c('mistyrose3', 'lightsteelblue3', 'lightyellow', 'olivedrab', 'darkgoldenrod3', 'lightsteelblue1', 'aquamarine4', 'bisque4')
+labvector = c('PC1', 'PC2', 'PC3', 'PC4')
+barplot(
+  pc_loadings[,c(1:4)],
+  beside = T,
+    yaxt = 'n',
+  names.arg = labvector,
+  col = colvector,
+  ylim = c(-1,1),
+  border = 'GRAY',
+  ylab = 'loadings'
+)
+axis(2, seq(-1,1,0.1))
+  legend(
+  'topright',
+  bty = 'n',
+  col = colvector,
+  pch = 15,
+  row.names(pc_loadings)
+)
+par(opar)
+```
+
+
+
+# Creating dataset with PCs
+
+```{r}
+pc_x <- data.frame(consumption.pr$x)
+consumption_pcs <- subset(pc_x, select = -c(PC5, PC6, PC7, PC8))
+# Add target variable to the new dataset
+anomalyTypes <- consumption$AnomalyType
+consumption_pcs$AnomalyType <- anomalyTypes
+```
+
+```{r}
+head(consumption_pcs)
+```
+
+
+```{r}
+write.csv(consumption_pcs,"C:/Users/aleks/OneDrive/Desktop/Brunel University/Dissertation/python/consumption.csv", row.names = TRUE)
+```
+
